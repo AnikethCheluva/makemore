@@ -15,21 +15,15 @@ class Model:
         self.ys = []
         self.wei = None
         self.probs = torch.zeros(())
-        self.temp = float(temp)
        
-
-
-    def bigram(self):
-
+       # map characters to ints
         chars = sorted(list(set(''.join(self.words))))
-
         self.stoi = {ch: i + 1 for i, ch in enumerate(chars)}
         self.stoi['.'] = 0
         self.itos = {i: ch for ch, i in self.stoi.items()}
         self.vocabsz = len(self.stoi)
 
-        self.counts = torch.zeros((self.vocabsz, self.vocabsz), dtype=torch.int32)
-
+        # Prepare training data and targets
         xs, ys = [], []
         for w in self.words:
             chs = ['.'] + list(w) + ['.']
@@ -41,28 +35,31 @@ class Model:
         self.ys = torch.tensor(self.ys)
         self.wei = torch.randn((27, 27), requires_grad=True)
 
+
+
+
     def forward(self):
         xencoded = F.one_hot(self.xs, num_classes=27).float()
         logits = xencoded @ self.wei
-        counts = logits.exp()
-        self.probs = counts / counts.sum(dim=1, keepdim=True)
+        self.probs = logits.exp()
+        self.probs = self.probs / self.probs.sum(dim=1, keepdim=True)
         return self.probs
 
     def trainloop(self, iters):
         for i in range(iters):
             self.forward()
-            loss = -self.probs[torch.arange(len(self.xs)), self.ys].log().mean()
+            loss = -self.probs[torch.arange(len(self.xs)), self.ys].log().mean() + 0.01*(self.wei**2).mean() # calculates negative log likelihood loss
             if i % 100 == 0:
                 print(f'Iteration {i}, Loss: {loss.item()}')
             self.wei.grad = None
-            loss.backward()
+            loss.backward() # backpropagate the loss
 
-            self.wei.data -= 50 * self.wei.grad
+            self.wei.data -= 50 * self.wei.grad # update weights with a learning rate of 50
     
     def sample(self, numnames, T=1.0):
         out = []
 
-        for _ in range(numnames):
+        while len(out) < numnames:
             word = ''
             smp = 0
             while True:
@@ -71,13 +68,14 @@ class Model:
                 if ch == '.':
                     break
                 word += ch
-            out.append(word)
+            if 2 < len(word) < 9:
+                out.append(word)
 
         return out
 
 
+
 m = Model('names.txt', 1)
-m.bigram()
 
 print(m.trainloop(1000))
 print(m.sample(9))
